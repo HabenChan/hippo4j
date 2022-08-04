@@ -22,12 +22,16 @@ import cn.hippo4j.adapter.web.WebThreadPoolHandlerChoose;
 import cn.hippo4j.common.api.ThreadDetailState;
 import cn.hippo4j.common.config.ApplicationContextHolder;
 import cn.hippo4j.core.config.UtilAutoConfiguration;
-import cn.hippo4j.core.config.WebThreadPoolConfiguration;
 import cn.hippo4j.core.enable.MarkerConfiguration;
+import cn.hippo4j.core.executor.ThreadPoolNotifyAlarmHandler;
 import cn.hippo4j.core.executor.state.ThreadPoolRunStateHandler;
 import cn.hippo4j.core.handler.DynamicThreadPoolBannerHandler;
 import cn.hippo4j.core.toolkit.IdentifyUtil;
 import cn.hippo4j.core.toolkit.inet.InetUtils;
+import cn.hippo4j.message.api.NotifyConfigBuilder;
+import cn.hippo4j.message.config.MessageConfiguration;
+import cn.hippo4j.message.service.AlarmControlHandler;
+import cn.hippo4j.message.service.Hippo4jSendMessageService;
 import cn.hippo4j.springboot.starter.controller.ThreadPoolAdapterController;
 import cn.hippo4j.springboot.starter.controller.WebThreadPoolController;
 import cn.hippo4j.springboot.starter.controller.WebThreadPoolRunStateController;
@@ -37,6 +41,7 @@ import cn.hippo4j.springboot.starter.monitor.ReportingEventExecutor;
 import cn.hippo4j.springboot.starter.monitor.collect.RunTimeInfoCollector;
 import cn.hippo4j.springboot.starter.monitor.send.MessageSender;
 import cn.hippo4j.springboot.starter.monitor.send.http.HttpConnectSender;
+import cn.hippo4j.springboot.starter.notify.ServerNotifyConfigBuilder;
 import cn.hippo4j.springboot.starter.remote.HttpAgent;
 import cn.hippo4j.springboot.starter.remote.HttpScheduledHealthCheck;
 import cn.hippo4j.springboot.starter.remote.ServerHealthCheck;
@@ -48,6 +53,7 @@ import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.context.annotation.Import;
 import org.springframework.core.Ordered;
 import org.springframework.core.annotation.Order;
 import org.springframework.core.env.ConfigurableEnvironment;
@@ -63,8 +69,8 @@ import org.springframework.core.env.ConfigurableEnvironment;
 @ConditionalOnBean(MarkerConfiguration.Marker.class)
 @EnableConfigurationProperties(BootstrapProperties.class)
 @ConditionalOnProperty(prefix = BootstrapProperties.PREFIX, value = "enable", matchIfMissing = true, havingValue = "true")
-@ImportAutoConfiguration({HttpClientConfiguration.class, NettyClientConfiguration.class, DiscoveryConfiguration.class, MessageNotifyConfiguration.class, UtilAutoConfiguration.class,
-        WebThreadPoolConfiguration.class})
+@ImportAutoConfiguration({HttpClientConfiguration.class, NettyClientConfiguration.class, DiscoveryConfiguration.class, MessageConfiguration.class, UtilAutoConfiguration.class})
+@Import(MonitorHandlerConfiguration.EmbeddedPrometheusMonitor.class)
 public class DynamicThreadPoolAutoConfiguration {
 
     private final BootstrapProperties properties;
@@ -166,5 +172,22 @@ public class DynamicThreadPoolAutoConfiguration {
     @SuppressWarnings("all")
     public ThreadPoolAdapterRegister threadPoolAdapterRegister(HttpAgent httpAgent, InetUtils hippo4JInetUtils) {
         return new ThreadPoolAdapterRegister(httpAgent, properties, environment, hippo4JInetUtils);
+    }
+
+    @Bean
+    public NotifyConfigBuilder serverNotifyConfigBuilder(HttpAgent httpAgent,
+                                                         BootstrapProperties properties,
+                                                         AlarmControlHandler alarmControlHandler) {
+        return new ServerNotifyConfigBuilder(httpAgent, properties, alarmControlHandler);
+    }
+
+    @Bean
+    public ServerThreadPoolDynamicRefresh threadPoolDynamicRefresh(ThreadPoolNotifyAlarmHandler threadPoolNotifyAlarmHandler) {
+        return new ServerThreadPoolDynamicRefresh(threadPoolNotifyAlarmHandler);
+    }
+
+    @Bean
+    public ThreadPoolNotifyAlarmHandler threadPoolNotifyAlarmHandler(Hippo4jSendMessageService hippoSendMessageService) {
+        return new ThreadPoolNotifyAlarmHandler(hippoSendMessageService);
     }
 }
